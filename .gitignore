@@ -1,0 +1,11 @@
+# Downloaded model weights (fetched at runtime via mlstac.download)
+model/
+
+# TerraVision temporary GeoTIFF output directories
+terravision_*/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
