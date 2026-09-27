@@ -120,254 +120,148 @@ def save_tensor_as_geotiff(tensor, attrs, out_path, super_resolved=False, sr_fac
 DEFAULT_LAT = 39.39785676571274
 DEFAULT_LON = -0.3798517619438821
 
+# --------------------------------------------------------
+# Leaflet CDN — injected into <head> via gr.Blocks(head=).
+# This is the correct Gradio 5 pattern for loading external
+# JS/CSS libraries: gr.HTML strips <script> tags, but
+# gr.Blocks(head=) injects them into the real page <head>.
+# --------------------------------------------------------
 LEAFLET_HEAD = """
-<link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
-
-<script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
-</script>
+<link rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 """
 
+# --------------------------------------------------------
+# Map container — just the div.
+# Leaflet and the init script are handled separately.
+# --------------------------------------------------------
+MAP_HTML_VALUE = '<div id="terrativision-map"></div>'
 
-# ============================================================
-# MAP JAVASCRIPT
-# ============================================================
+# --------------------------------------------------------
+# Map init JavaScript — passed to gr.Blocks(js=).
+# Must be a function string. Uses retry loop because
+# Gradio renders the DOM asynchronously.
+# --------------------------------------------------------
+MAP_JS = f"""
+() => {{
+    function tryInitTerraVisionMap() {{
 
-MAP_JS = """
-// ============================================================
-// TERRAVISION LEAFLET MAP
-// ============================================================
+        // Wait for Leaflet library to load
+        if (typeof L === "undefined") {{
+            setTimeout(tryInitTerraVisionMap, 300);
+            return;
+        }}
 
-const mapDiv = document.getElementById("terrativision-map");
+        const mapDiv = document.getElementById("terrativision-map");
 
-if (!mapDiv) {
+        // Wait for the map container div to appear in the DOM
+        if (!mapDiv) {{
+            setTimeout(tryInitTerraVisionMap, 300);
+            return;
+        }}
 
-    console.error("❌ TerraVision map container not found.");
+        // Prevent double-initialisation
+        if (mapDiv._terraVisionMapInitialized) return;
+        mapDiv._terraVisionMapInitialized = true;
 
-} else if (mapDiv._terraVisionMapInitialized) {
+        const defaultLat = {DEFAULT_LAT};
+        const defaultLon = {DEFAULT_LON};
 
-    console.log("ℹ️ TerraVision map already initialized.");
+        // ------------------------------------------------
+        // CREATE MAP
+        // ------------------------------------------------
+        const map = L.map(mapDiv).setView([defaultLat, defaultLon], 10);
 
-} else {
+        // ------------------------------------------------
+        // STREET MAP
+        // ------------------------------------------------
+        const osmLayer = L.tileLayer(
+            "https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png",
+            {{ maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }}
+        ).addTo(map);
 
-    mapDiv._terraVisionMapInitialized = true;
-
-    const defaultLat = __DEFAULT_LAT__;
-    const defaultLon = __DEFAULT_LON__;
-
-    // --------------------------------------------------------
-    // CREATE MAP
-    // --------------------------------------------------------
-
-    const map = L.map(mapDiv).setView(
-        [defaultLat, defaultLon],
-        10
-    );
-
-    // --------------------------------------------------------
-    // STREET MAP
-    // --------------------------------------------------------
-
-    const osmLayer = L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-            maxZoom: 19,
-            attribution: "&copy; OpenStreetMap contributors"
-        }
-    ).addTo(map);
-
-    // --------------------------------------------------------
-    // SATELLITE MAP
-    // --------------------------------------------------------
-
-    const satelliteLayer = L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        {
-            maxZoom: 19,
-            attribution: "Tiles &copy; Esri"
-        }
-    );
-
-    // --------------------------------------------------------
-    // LAYER CONTROL
-    // --------------------------------------------------------
-
-    L.control.layers(
-        {
-            "Street Map": osmLayer,
-            "Satellite": satelliteLayer
-        }
-    ).addTo(map);
-
-    // --------------------------------------------------------
-    // MARKER
-    // --------------------------------------------------------
-
-    let marker = L.marker(
-        [defaultLat, defaultLon]
-    ).addTo(map);
-
-    // --------------------------------------------------------
-    // LOCATION DISPLAY
-    // --------------------------------------------------------
-
-    const locationDisplay =
-        document.querySelector("#map-location-display");
-
-    function updateLocationDisplay(lat, lon) {
-
-        if (locationDisplay) {
-
-            locationDisplay.innerHTML =
-                "📍 <b>Selected:</b> " +
-                lat.toFixed(8) +
-                ", " +
-                lon.toFixed(8);
-        }
-    }
-
-    updateLocationDisplay(
-        defaultLat,
-        defaultLon
-    );
-
-    marker.bindPopup(
-        "<b>Selected Location</b><br>" +
-        defaultLat.toFixed(8) +
-        ", " +
-        defaultLon.toFixed(8)
-    );
-
-    // --------------------------------------------------------
-    // MAP CLICK
-    // --------------------------------------------------------
-
-    map.on("click", function(e) {
-
-        const lat = e.latlng.lat;
-        const lon = e.latlng.lng;
-
-        console.log(
-            "📍 TerraVision selected:",
-            lat,
-            lon
+        // ------------------------------------------------
+        // SATELLITE MAP
+        // ------------------------------------------------
+        const satelliteLayer = L.tileLayer(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}",
+            {{ maxZoom: 19, attribution: "Tiles &copy; Esri" }}
         );
 
-        // Move marker
-        marker.setLatLng([lat, lon]);
+        // ------------------------------------------------
+        // LAYER CONTROL
+        // ------------------------------------------------
+        L.control.layers(
+            {{ "Street Map": osmLayer, "Satellite": satelliteLayer }}
+        ).addTo(map);
 
-        // Update popup
+        // ------------------------------------------------
+        // MARKER
+        // ------------------------------------------------
+        let marker = L.marker([defaultLat, defaultLon]).addTo(map);
+
+        // ------------------------------------------------
+        // LOCATION DISPLAY
+        // ------------------------------------------------
+        const locationDisplay = document.querySelector("#map-location-display");
+
+        function updateLocationDisplay(lat, lon) {{
+            if (locationDisplay) {{
+                locationDisplay.innerHTML =
+                    "📍 <b>Selected:</b> " + lat.toFixed(8) + ", " + lon.toFixed(8);
+            }}
+        }}
+
+        updateLocationDisplay(defaultLat, defaultLon);
         marker.bindPopup(
             "<b>Selected Location</b><br>" +
-            lat.toFixed(8) +
-            ", " +
-            lon.toFixed(8)
-        ).openPopup();
-
-        // Update visible selected text
-        updateLocationDisplay(lat, lon);
-
-// --------------------------------------------------------
-// UPDATE GRADIO LATITUDE / LONGITUDE
-// --------------------------------------------------------
-
-function updateGradioNumber(elemId, value) {
-
-    const container = document.getElementById(elemId);
-
-    if (!container) {
-        console.error(
-            "❌ Gradio component not found:",
-            elemId
+            defaultLat.toFixed(8) + ", " + defaultLon.toFixed(8)
         );
-        return;
-    }
 
-    const input = container.querySelector("input");
+        // ------------------------------------------------
+        // MAP CLICK
+        // ------------------------------------------------
+        map.on("click", function(e) {{
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
 
-    if (!input) {
-        console.error(
-            "❌ Input element not found:",
-            elemId
-        );
-        return;
-    }
+            marker.setLatLng([lat, lon]);
+            marker.bindPopup(
+                "<b>Selected Location</b><br>" + lat.toFixed(8) + ", " + lon.toFixed(8)
+            ).openPopup();
 
-    // Use the native HTML value setter.
-    // This is important because Gradio uses a controlled input.
-    const nativeSetter =
-        Object.getOwnPropertyDescriptor(
-            HTMLInputElement.prototype,
-            "value"
-        ).set;
+            updateLocationDisplay(lat, lon);
 
-    nativeSetter.call(
-        input,
-        String(value)
-    );
+            // Update Gradio Number inputs
+            function updateGradioNumber(elemId, value) {{
+                const container = document.getElementById(elemId);
+                if (!container) return;
+                const input = container.querySelector("input");
+                if (!input) return;
+                const nativeSetter = Object.getOwnPropertyDescriptor(
+                    HTMLInputElement.prototype, "value"
+                ).set;
+                nativeSetter.call(input, String(value));
+                input.dispatchEvent(new Event("input",  {{ bubbles: true }}));
+                input.dispatchEvent(new Event("change", {{ bubbles: true }}));
+            }}
 
-    // Tell Gradio that the user changed the input
-    input.dispatchEvent(
-        new Event("input", {
-            bubbles: true
-        })
-    );
+            updateGradioNumber("latitude_input",  lat);
+            updateGradioNumber("longitude_input", lon);
+        }});
 
-    input.dispatchEvent(
-        new Event("change", {
-            bubbles: true
-        })
-    );
+        // Fix map tile rendering after Gradio layout settles
+        setTimeout(function() {{ map.invalidateSize(); }}, 500);
 
-    console.log(
-        "✅ Updated Gradio:",
-        elemId,
-        value
-    );
-}
+        console.log("✅ TerraVision Leaflet map initialized successfully.");
+    }}
 
-updateGradioNumber(
-    "latitude_input",
-    lat
-);
-
-updateGradioNumber(
-    "longitude_input",
-    lon
-);
-
-    });
-
-    // --------------------------------------------------------
-    // FIX MAP SIZE
-    // --------------------------------------------------------
-
-    setTimeout(function() {
-
-        map.invalidateSize();
-
-    }, 500);
-
-    // Store map reference
-    element._terraVisionMap = map;
-
-    console.log(
-        "✅ TerraVision Leaflet map initialized successfully."
-    );
-}
+    // Delay first attempt to let Gradio finish rendering
+    setTimeout(tryInitTerraVisionMap, 800);
+}}
 """
 
-# Insert Python values without using an f-string
-MAP_JS = MAP_JS.replace(
-    "__DEFAULT_LAT__",
-    str(DEFAULT_LAT)
-).replace(
-    "__DEFAULT_LON__",
-    str(DEFAULT_LON)
-)
 
 
 # ============================================================
@@ -488,6 +382,74 @@ def clean_uncertainty(image):
 
     # Convert to display image
     return (image * 255.0).round().astype(np.uint8)
+
+
+# ============================================================
+# INDEX COLORIZATION
+# Converts a [-1, 1] spectral index to an RGB thematic map
+# using a linear interpolation between three anchor colours.
+# Uses only numpy (no matplotlib dependency needed).
+# ============================================================
+
+def _lerp_color(t, c0, c1):
+    """Linearly interpolate between two RGB tuples, t in [0, 1]."""
+    t = np.clip(t, 0.0, 1.0)[..., np.newaxis]  # (..., 1)
+    return c0 * (1.0 - t) + c1 * t             # (..., 3)
+
+
+def colorize_index(index_arr, scheme):
+    """
+    Convert a 2-D spectral index array (values in [-1, 1]) to a
+    uint8 RGB image using a three-stop colour ramp.
+
+    scheme : one of 'ndvi' | 'ndwi' | 'ndbi'
+
+    Colour stops (low / mid / high) in float RGB [0, 1]:
+      ndvi  : red  (1,0,0) -> yellow (1,1,0) -> green  (0,0.5,0)
+      ndwi  : brown(0.6,0.4,0.2) -> white (1,1,1) -> blue (0,0.3,1)
+      ndbi  : green(0,0.5,0) -> yellow (1,1,0) -> red   (1,0,0)
+    """
+    arr = np.asarray(index_arr, dtype=np.float32)
+    arr = np.nan_to_num(arr, nan=0.0, posinf=1.0, neginf=-1.0)
+    arr = np.clip(arr, -1.0, 1.0)
+
+    # Map [-1, 1] -> [0, 1]
+    t = (arr + 1.0) / 2.0   # 0 = low, 0.5 = mid, 1 = high
+
+    COLOR_STOPS = {
+        # (low_rgb, mid_rgb, high_rgb)
+        "ndvi": (
+            np.array([1.00, 0.00, 0.00]),   # red
+            np.array([1.00, 1.00, 0.00]),   # yellow
+            np.array([0.00, 0.50, 0.00]),   # green
+        ),
+        "ndwi": (
+            np.array([0.60, 0.40, 0.20]),   # brown
+            np.array([1.00, 1.00, 1.00]),   # white
+            np.array([0.00, 0.30, 1.00]),   # blue
+        ),
+        "ndbi": (
+            np.array([0.00, 0.50, 0.00]),   # green
+            np.array([1.00, 1.00, 0.00]),   # yellow
+            np.array([1.00, 0.00, 0.00]),   # red
+        ),
+    }
+
+    low_c, mid_c, high_c = COLOR_STOPS[scheme]
+
+    # Two-segment ramp: [0, 0.5] -> low..mid, [0.5, 1] -> mid..high
+    t_lo = np.clip(t / 0.5, 0.0, 1.0)         # normalised within lower half
+    t_hi = np.clip((t - 0.5) / 0.5, 0.0, 1.0) # normalised within upper half
+
+    rgb_lo = _lerp_color(t_lo, low_c, mid_c)   # (..., 3)
+    rgb_hi = _lerp_color(t_hi, mid_c, high_c)  # (..., 3)
+
+    # Blend: use lower half for t < 0.5, upper half otherwise
+    mask = (t >= 0.5)[..., np.newaxis]
+    rgb = np.where(mask, rgb_hi, rgb_lo)
+
+    rgb = np.clip(rgb, 0.0, 1.0)
+    return (rgb * 255.0).round().astype(np.uint8)
 
 
 # ============================================================
@@ -644,8 +606,6 @@ def generate_satellite_products(
 
     ndbi = (B11 - B08) / (B11 + B08 + eps)
 
-    nbr  = (B08 - B12) / (B08 + B12 + eps)
-
     # --------------------------------------------------
     # 6. Uncertainty  [GPU]
     # --------------------------------------------------
@@ -730,11 +690,6 @@ def generate_satellite_products(
         "false_color.tif"
     )
 
-    paths["SWIR"] = save_layer(
-        swir,
-        "swir.tif"
-    )
-
     paths["NDVI"] = save_layer(
         ndvi,
         "ndvi.tif"
@@ -750,15 +705,11 @@ def generate_satellite_products(
         "ndbi.tif"
     )
 
-    paths["NBR"] = save_layer(
-        nbr,
-        "nbr.tif"
-    )
-
     paths["Uncertainty"] = save_layer(
         uncertainty_np,
         "uncertainty.tif"
     )
+
 
     # --------------------------------------------------
     # ZIP all GeoTIFFs
@@ -790,11 +741,9 @@ def generate_satellite_products(
         "rgb": rgb,
         "original_rgb": original_rgb,
         "false_color": false_color,
-        "swir": swir,
         "ndvi": ndvi,
         "ndwi": ndwi,
         "ndbi": ndbi,
-        "nbr": nbr,
         "uncertainty": uncertainty_np,
         "files": paths,
         "zip": zip_path
@@ -846,15 +795,11 @@ def run_app(latitude, longitude, start_date, end_date):
     # -------------------------------------------------
     false_color_img = clean_rgb(results["false_color"])
 
-    swir_img = clean_rgb(results["swir"])
-
-    ndvi_img = clean_index(results["ndvi"])
-
-    ndwi_img = clean_index(results["ndwi"])
-
-    ndbi_img = clean_index(results["ndbi"])
-
-    nbr_img = clean_index(results["nbr"])
+    # Colored thematic maps for UI display.
+    # GeoTIFFs use the original numerical arrays (saved in pipeline).
+    ndvi_colored = colorize_index(results["ndvi"], "ndvi")
+    ndwi_colored = colorize_index(results["ndwi"], "ndwi")
+    ndbi_colored = colorize_index(results["ndbi"], "ndbi")
 
     uncertainty_img = clean_uncertainty(
         results["uncertainty"]
@@ -866,16 +811,21 @@ def run_app(latitude, longitude, start_date, end_date):
     zip_file_path = results["zip"]
 
     # -------------------------------------------------
-    # RETURN EXACTLY 9 OUTPUTS
+    # RETURN EXACTLY 7 OUTPUTS (matches UI components)
+    # 1. comparison slider
+    # 2. false color / NIR
+    # 3. NDVI colored
+    # 4. NDWI colored
+    # 5. NDBI colored
+    # 6. uncertainty
+    # 7. ZIP download
     # -------------------------------------------------
     return (
         comparison_images,
         false_color_img,
-        swir_img,
-        ndvi_img,
-        ndwi_img,
-        ndbi_img,
-        nbr_img,
+        ndvi_colored,
+        ndwi_colored,
+        ndbi_colored,
         uncertainty_img,
         zip_file_path
     )
@@ -886,8 +836,10 @@ def run_app(latitude, longitude, start_date, end_date):
 # ============================================================
 
 with gr.Blocks(
-    title="TerraVision — Sentinel-2 Super Resolution"
-    # css parameter moved to demo.launch()
+    title="TerraVision — Sentinel-2 Super Resolution",
+    css=custom_css,
+    head=LEAFLET_HEAD,  # Injects Leaflet CSS/JS into the page <head>
+    js=MAP_JS           # Runs map init after Gradio finishes rendering
 ) as demo:
 
     # ========================================================
@@ -924,15 +876,9 @@ with gr.Blocks(
             # ------------------------------------------------
 
             map_html = gr.HTML(
-
-                # Value now contains the div that Leaflet will target
-                value='<div id="terrativision-map"></div>',
-
-                head=LEAFLET_HEAD,
-
-                js_on_load=MAP_JS,
-
-                # elem_id for the wrapping gr.HTML component itself
+                # Leaflet CSS/JS + map div + init script all inlined.
+                # Gradio 5 gr.HTML does not support 'head' or 'js_on_load'.
+                value=MAP_HTML_VALUE,
                 elem_id="map-container-wrapper"
             )
 
@@ -1072,16 +1018,11 @@ with gr.Blocks(
                 image_mode="RGB",
 
                 height=500,
-
-                buttons=[
-                    "download",
-                    "fullscreen"
-                ]
             )
 
 
             # ------------------------------------------------
-            # FALSE COLOR + SWIR
+            # FALSE COLOR
             # ------------------------------------------------
 
             with gr.Row():
@@ -1092,49 +1033,64 @@ with gr.Blocks(
                     height=320
                 )
 
-                swir_output = gr.Image(
-                    label="SWIR Composite",
-                    type="numpy",
-                    height=320
-                )
-
 
             # ------------------------------------------------
-            # NDVI / NDWI / NDBI
+            # NDVI / NDWI / NDBI  (colored thematic maps)
             # ------------------------------------------------
 
             with gr.Row():
 
-                ndvi_output = gr.Image(
-                    label="NDVI",
-                    type="numpy",
-                    height=300
-                )
+                with gr.Column():
+                    ndvi_output = gr.Image(
+                        label="NDVI",
+                        type="numpy",
+                        height=300
+                    )
+                    gr.HTML(
+                        '<div style="display:flex;justify-content:space-between;'
+                        'font-size:11px;padding:2px 4px;">'  
+                        '<span style="color:#e00;">&#9632; Low vegetation</span>'
+                        '<span style="color:#cc0;">&#9632; Medium</span>'
+                        '<span style="color:#080;">&#9632; High vegetation</span>'
+                        '</div>'
+                    )
 
-                ndwi_output = gr.Image(
-                    label="NDWI",
-                    type="numpy",
-                    height=300
-                )
+                with gr.Column():
+                    ndwi_output = gr.Image(
+                        label="NDWI",
+                        type="numpy",
+                        height=300
+                    )
+                    gr.HTML(
+                        '<div style="display:flex;justify-content:space-between;'
+                        'font-size:11px;padding:2px 4px;">'  
+                        '<span style="color:#8B4513;">&#9632; Low water</span>'
+                        '<span style="color:#aaa;">&#9632; Medium</span>'
+                        '<span style="color:#04c;">&#9632; High water</span>'
+                        '</div>'
+                    )
 
-                ndbi_output = gr.Image(
-                    label="NDBI",
-                    type="numpy",
-                    height=300
-                )
+                with gr.Column():
+                    ndbi_output = gr.Image(
+                        label="NDBI",
+                        type="numpy",
+                        height=300
+                    )
+                    gr.HTML(
+                        '<div style="display:flex;justify-content:space-between;'
+                        'font-size:11px;padding:2px 4px;">'  
+                        '<span style="color:#080;">&#9632; Low built-up</span>'
+                        '<span style="color:#cc0;">&#9632; Medium</span>'
+                        '<span style="color:#e00;">&#9632; High built-up</span>'
+                        '</div>'
+                    )
 
 
             # ------------------------------------------------
-            # NBR + UNCERTAINTY
+            # UNCERTAINTY
             # ------------------------------------------------
 
             with gr.Row():
-
-                nbr_output = gr.Image(
-                    label="NBR",
-                    type="numpy",
-                    height=320
-                )
 
                 uncertainty_output = gr.Image(
                     label="LDSR-S2 Uncertainty",
@@ -1172,11 +1128,9 @@ with gr.Blocks(
         outputs=[
             comparison_output,
             false_color_output,
-            swir_output,
             ndvi_output,
             ndwi_output,
             ndbi_output,
-            nbr_output,
             uncertainty_output,
             zip_output
         ]
@@ -1185,4 +1139,4 @@ with gr.Blocks(
 
 print("✅ TerraVision UI + Interactive Map created successfully!")
 
-demo.launch(css=custom_css)
+demo.launch()

@@ -1,0 +1,26 @@
+# ============================================================
+# TerraVision — Hugging Face ZeroGPU Space dependencies
+#
+# Notes:
+# - torch / torchvision are pre-installed on the ZeroGPU base
+#   image with CUDA support. Listing them here ensures pip
+#   resolves them correctly without re-installing CUDA builds.
+# - Do NOT pin exact torch versions; let the HF base image
+#   supply the matching CUDA-enabled wheel.
+# - spaces is the Hugging Face ZeroGPU client library.
+# ============================================================
+
+spaces
+gradio
+torch
+torchvision
+numpy
+Pillow
+rasterio
+rioxarray
+sen2sr
+opensr-model
+mlstac
+cubo
+omegaconf
+requests
